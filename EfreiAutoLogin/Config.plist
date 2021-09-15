@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Efrei BSSID</key>
+	<array>
+		<string>80:8d:b7:67:ac:73</string>
+		<string>80:8d:b7:66:d9:f3</string>
+	</array>
+	<key>Captive Portal Host</key>
+	<string>captiveportal-login.groupe-efrei.fr</string>
+	<key>Captive Portal Logout URL</key>
+	<string>https://captiveportal-login.groupe-efrei.fr/auth/logout.html</string>
+	<key>Connection Test URL</key>
+	<string>http://www.apple.com/library/test/success.html?cmd=redirect&amp;arubalp=12345</string>
+	<key>Connection Test Success Result</key>
+	<string>&lt;HTML&gt;&lt;HEAD&gt;&lt;TITLE&gt;Success&lt;/TITLE&gt;&lt;/HEAD&gt;&lt;BODY&gt;Success&lt;/BODY&gt;&lt;/HTML&gt;</string>
+</dict>
+</plist>
