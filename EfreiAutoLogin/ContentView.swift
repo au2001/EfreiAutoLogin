@@ -100,6 +100,13 @@ struct ContentView: View {
                 .padding(.horizontal, 10)
 
             HStack {
+                Button("Login", action: {
+                    let app = NSApplication.shared.delegate as! AppDelegate
+                    app.checkPortal()
+                })
+                    .buttonStyle(BorderedButtonStyle())
+                    .padding(10)
+
                 Button("Logout", action: {
                     let app = NSApplication.shared.delegate as! AppDelegate
                     app.logout()

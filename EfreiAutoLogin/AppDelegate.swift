@@ -17,7 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem!
     var contentView: ContentView?
     
-    var efreiBSSID: [String]?
+    var efreiSSID: [String]?
     var testURL: URL?
     var testResult: String?
     var portalHost: String?
@@ -26,6 +26,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         self.contentView = ContentView()
         self.loadConfig()
+        
+        // TODO: Check that CNA is disabled
+        // sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.captive.control Active -boolean false
 
         // Create the popover
         let popover = NSPopover()
@@ -61,7 +64,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         let config = NSDictionary(contentsOfFile: path)
-        self.efreiBSSID = config?["Efrei BSSID"] as? [String]
+        self.efreiSSID = config?["Efrei SSID"] as? [String]
         self.portalHost = config?["Captive Portal Host"] as? String
         self.defaultLogoutURL = URL(string: config?["Captive Portal Logout URL"] as? String ?? "")
         self.testURL = URL(string: config?["Connection Test URL"] as? String ?? "")
@@ -84,7 +87,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let store = SCDynamicStoreCreate(nil, bundleName, callback, &context) {
             self.networkUpdated(store)
 
-            SCDynamicStoreSetNotificationKeys(store, ["State:/Network/Global/IPv4"] as CFArray, nil)
+            SCDynamicStoreSetNotificationKeys(store, [
+                "State:/Network/Global/IPv4"
+            ] as CFArray, [
+//                "Setup:/Network/Service/.*/Interface",
+//                "State:/Network/Interface/.*/AirPort",
+//                "State:/Network/Interface/.*/CaptiveNetwork"
+            ] as CFArray)
             SCDynamicStoreSetDispatchQueue(store, DispatchQueue.main)
         }
     }
@@ -93,10 +102,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.killAssistant()
 
         // Ensure connected to WiFi (Ethernet doesn't have a captive portal)
-        guard let ipv4State = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [CFString: Any] else {
-            print("Failed to fetch IPv4 state")
-            return
-        }
+        guard let ipv4State = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [CFString: Any]
+            else { return } // Not connected to a network
         guard let primaryServiceID = ipv4State[kSCDynamicStorePropNetPrimaryService] else {
             print("Failed to fetch primary network service")
             return
@@ -111,19 +118,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        // Ensure BSSID corresponds to one of Efrei's
+        // Ensure (B)SSID corresponds to one of Efrei's
         let interfaceName = interfaceSetup[kSCPropNetInterfaceDeviceName] as! CFString
         let airportStateName = "State:/Network/Interface/\(interfaceName)/AirPort" as CFString
         guard let airportState = SCDynamicStoreCopyValue(store, airportStateName) as? [CFString: Any] else {
             print("Failed to fetch network state for interface \(interfaceName)")
             return
         }
-        guard let bssidData = airportState["BSSID" as CFString] as? Data else {
-            print("Failed to fetch network BSSID")
-            return
-        }
-        let bssid = bssidData.reduce([], { (arr, byte) in arr + [String(format: "%02x", byte)] }).joined(separator: ":")
-        guard efreiBSSID?.contains(bssid) ?? false
+//        guard let bssidData = airportState["BSSID" as CFString] as? Data else {
+//            print("Failed to fetch network BSSID")
+//            return
+//        }
+//        let bssid = bssidData.reduce([], { (arr, byte) in arr + [String(format: "%02x", byte)] }).joined(separator: ":")
+        let ssid = airportState["SSID_STR" as CFString] as! String
+        guard efreiSSID?.contains(ssid) ?? false
             else { return } // This is another network as Efrei
         
         self.checkPortal()
@@ -132,7 +140,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func checkPortal(withMaxRetries retries: Int = 3) {
         self.killAssistant()
 
-        let task = URLSession.shared.dataTask(with: self.testURL!, completionHandler: { (data, response, error) in
+        let task = URLSession(configuration: .ephemeral).dataTask(with: self.testURL!, completionHandler: { (data, response, error) in
             guard let data = data, let response = response else {
                 print("Request failed (offline?): \(error?.localizedDescription ?? "nil")")
                 return
@@ -171,7 +179,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             "Content-Type": "application/x-www-form-urlencoded"
         ]
         request.httpBody = query.query?.data(using: .utf8)
-        let task = URLSession.shared.dataTask(with: request, completionHandler: { (data, response, error) in
+        let task = URLSession(configuration: .ephemeral).dataTask(with: request, completionHandler: { (data, response, error) in
+            print("Logged in.")
             self.checkPortal(withMaxRetries: retries)
         })
         task.resume()
@@ -180,7 +189,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func logout(at url: URL? = nil) {
         self.killAssistant()
 
-        let task = URLSession.shared.dataTask(with: url ?? self.defaultLogoutURL!)
+        let task = URLSession(configuration: .ephemeral).dataTask(with: url ?? self.defaultLogoutURL!)
         task.resume()
     }
     
