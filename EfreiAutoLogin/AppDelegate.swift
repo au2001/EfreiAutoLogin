@@ -26,9 +26,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         self.contentView = ContentView()
         self.loadConfig()
-        
-        // TODO: Check that CNA is disabled
-        // sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.captive.control Active -boolean false
 
         // Create the popover
         let popover = NSPopover()
@@ -85,6 +82,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let bundleName = Bundle.main.infoDictionary?[kCFBundleNameKey as String] as! CFString
         if let store = SCDynamicStoreCreate(nil, bundleName, callback, &context) {
+            self.checkAssistant(store)
             self.networkUpdated(store)
 
             SCDynamicStoreSetNotificationKeys(store, [
@@ -99,8 +97,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func networkUpdated(_ store: SCDynamicStore) {
-        self.killAssistant()
-
         // Ensure connected to WiFi (Ethernet doesn't have a captive portal)
         guard let ipv4State = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [CFString: Any]
             else { return } // Not connected to a network
@@ -138,8 +134,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func checkPortal(withMaxRetries retries: Int = 3) {
-        self.killAssistant()
-
         let task = URLSession(configuration: .ephemeral).dataTask(with: self.testURL!, completionHandler: { (data, response, error) in
             guard let data = data, let response = response else {
                 print("Request failed (offline?): \(error?.localizedDescription ?? "nil")")
@@ -164,8 +158,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func login(at url: URL, withMaxRetries retries: Int = 0) {
-        self.killAssistant()
-
         let (username, password) = self.contentView?.load() ?? ("", "")
 
         var query = URLComponents()
@@ -187,23 +179,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func logout(at url: URL? = nil) {
-        self.killAssistant()
-
         let task = URLSession(configuration: .ephemeral).dataTask(with: url ?? self.defaultLogoutURL!)
         task.resume()
     }
     
-    func killAssistant() {
-        for app in NSWorkspace.shared.runningApplications {
-            guard app.bundleIdentifier == "com.apple.CaptiveNetworkAssistant" else {
-                continue
-            }
-            
-            guard app.isTerminated || app.terminate() else {
-                print("Failed to kill Captive Network Assistant")
-                continue
-            }
-        }
+    func checkAssistant(_ store: SCDynamicStore) {
+        guard let captiveState = SCDynamicStoreCopyMultiple(store, [] as CFArray, ["State:/Network/Interface/.*/CaptiveNetwork"] as CFArray) as? Dictionary<String, Any>
+            else { return }
+        if captiveState.isEmpty { return }
+        
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "Warning: Captive Network Assistant must be disabled."
+        alert.informativeText = "The native Captive Portal pop-up conflicts with this app. To disable it, type the following command in your Terminal and then RESTART your computer:\n\nsudo defaults write /Library/Preferences/SystemConfiguration/com.apple.captive.control Active -boolean false"
+        alert.addButton(withTitle: "Dismiss")
+        alert.runModal()
     }
 
 }
